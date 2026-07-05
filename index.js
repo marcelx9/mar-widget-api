@@ -23,10 +23,6 @@ function imageField(name, url) {
     };
 }
 
-function firstValidImage(...urls) {
-    return urls.find(isValidUrl) || null;
-}
-
 async function getMusicStats() {
     const lastfm = await getLastFmStats();
 
@@ -60,16 +56,10 @@ async function getMusicStats() {
         if (isValidUrl(img)) topSongImage = img;
     } catch {}
 
-    const fallbackImage = firstValidImage(
-        lastSongImage,
-        topSongImage,
-        topAlbumImage
-    );
-
-    topArtistImage = firstValidImage(topArtistImage, fallbackImage);
-    lastSongImage = firstValidImage(lastSongImage, fallbackImage);
-    topSongImage = firstValidImage(topSongImage, fallbackImage);
-    topAlbumImage = firstValidImage(topAlbumImage, fallbackImage);
+    if (!isValidUrl(lastSongImage)) lastSongImage = null;
+    if (!isValidUrl(topArtistImage)) topArtistImage = null;
+    if (!isValidUrl(topSongImage)) topSongImage = null;
+    if (!isValidUrl(topAlbumImage)) topAlbumImage = null;
 
     return {
         last_song: lastfm.last_song,
