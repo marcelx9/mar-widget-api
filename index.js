@@ -34,13 +34,11 @@ async function getMusicStats() {
     let topAlbumImage = lastfm.top_album_image_fallback;
     let lastSongImage = lastfm.last_song_image_fallback;
 
-    // <-- CAMBIADO
-    let topArtistImage =
-        lastfm.top_album_image_fallback ||
-        lastfm.top_song_image_fallback ||
-        lastfm.last_song_image_fallback;
+// No usamos imagen de álbum como artista, porque se repite mal
+    let topArtistImage = null;
 
-    let topSongImage = lastfm.top_song_image_fallback;
+// Para top song, primero dejamos null para forzar Spotify
+    let topSongImage = null;
     let likedSongs = 0;
 
     try {
@@ -76,16 +74,14 @@ async function getMusicStats() {
     if (!isValidUrl(lastSongImage)) lastSongImage = null;
     if (!isValidUrl(topAlbumImage)) topAlbumImage = lastSongImage || null;
 
+// Si Spotify no encuentra portada de top song, recién usamos LastFM
     if (!isValidUrl(topSongImage)) {
-        topSongImage = topAlbumImage || lastSongImage || null;
+        topSongImage = lastfm.top_song_image_fallback || null;
     }
 
+// Si Spotify no encuentra imagen del artista, mejor no poner otra imagen falsa
     if (!isValidUrl(topArtistImage)) {
-        topArtistImage =
-            topAlbumImage ||
-            topSongImage ||
-            lastSongImage ||
-            null;
+        topArtistImage = null;
     }
 
     return {
