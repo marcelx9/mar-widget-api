@@ -60,16 +60,22 @@ async function getMusicStats() {
 
     try {
         const img = await getArtistImage(lastfm.top_artist);
+        console.log("Spotify top_artist_image:", img);
         if (isValidUrl(img)) topArtistImage = img;
-    } catch {}
+    } catch (err) {
+        console.error("ERROR getArtistImage:", err.response?.data || err.message);
+    }
 
     try {
         const img = await getTrackImage(
             lastfm.top_song,
             lastfm.top_song_artist
         );
+        console.log("Spotify top_song_image:", img);
         if (isValidUrl(img)) topSongImage = img;
-    } catch {}
+    } catch (err) {
+        console.error("ERROR getTrackImage TOP SONG:", err.response?.data || err.message);
+    }
 
     if (!isValidUrl(lastSongImage)) lastSongImage = null;
     if (!isValidUrl(topAlbumImage)) topAlbumImage = lastSongImage || null;
