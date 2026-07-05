@@ -118,7 +118,11 @@ function buildDiscordPayload(stats) {
                     value: { url: String(stats.last_album_image) },
                 },
 
-                { type: 1, name: "top_album", value: String(stats.top_album) },
+                {
+                    type: 1,
+                    name: "top_album",
+                    value: `${stats.top_album} · ${stats.top_album_artist}`,
+                },
                 { type: 1, name: "top_album_artist", value: String(stats.top_album_artist) },
                 {
                     type: 3,
