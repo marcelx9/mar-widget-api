@@ -1,7 +1,14 @@
 const axios = require("axios");
 const querystring = require("querystring");
 
+let cachedToken = null;
+let tokenExpiresAt = 0;
+
 async function getSpotifyAccessToken() {
+    if (cachedToken && Date.now() < tokenExpiresAt) {
+        return cachedToken;
+    }
+
     const response = await axios.post(
         "https://accounts.spotify.com/api/token",
         querystring.stringify({
@@ -13,18 +20,43 @@ async function getSpotifyAccessToken() {
                 Authorization:
                     "Basic " +
                     Buffer.from(
-                        process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET
+                        process.env.SPOTIFY_CLIENT_ID +
+                        ":" +
+                        process.env.SPOTIFY_CLIENT_SECRET
                     ).toString("base64"),
                 "Content-Type": "application/x-www-form-urlencoded",
             },
         }
     );
 
-    return response.data.access_token;
+    cachedToken = response.data.access_token;
+    tokenExpiresAt = Date.now() + 50 * 60 * 1000;
+
+    return cachedToken;
 }
 
 function getBestImage(images) {
-    return images?.find((img) => img?.url)?.url || null;
+    if (!Array.isArray(images) || images.length === 0) return null;
+
+    return (
+        images.find((img) => img.width >= 600)?.url ||
+        images[0]?.url ||
+        null
+    );
+}
+
+function cleanText(text) {
+    return String(text || "")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\(.*?\)/g, "")
+        .replace(/\[.*?\]/g, "")
+        .replace(/feat\.|ft\./g, "")
+        .replace(/with .+/g, "")
+        .replace(/[^a-z0-9\s]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 async function spotifySearch(type, query, limit = 10) {
@@ -45,20 +77,10 @@ async function spotifySearch(type, query, limit = 10) {
     return response.data;
 }
 
-function cleanText(text) {
-    return String(text || "")
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/\(.*?\)/g, "")
-        .replace(/\[.*?\]/g, "")
-        .replace(/feat\.|ft\./g, "")
-        .replace(/[^a-z0-9\s]/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-}
-
 async function getTrackImage(song, artist) {
+    const songClean = cleanText(song);
+    const artistClean = cleanText(artist);
+
     const queries = [
         `${song} ${artist}`,
         `track:${song} artist:${artist}`,
@@ -70,22 +92,33 @@ async function getTrackImage(song, artist) {
         const items = data.tracks?.items || [];
 
         const exact = items.find((track) => {
+            const trackName = cleanText(track.name);
+            const artists = track.artists || [];
+
             return (
-                cleanText(track.name) === cleanText(song) &&
-                track.artists?.some((a) => cleanText(a.name) === cleanText(artist))
+                trackName === songClean &&
+                artists.some((a) => cleanText(a.name) === artistClean)
             );
         });
 
         const partial = items.find((track) => {
+            const trackName = cleanText(track.name);
+            const artists = track.artists || [];
+
             return (
-                cleanText(track.name).includes(cleanText(song)) ||
-                cleanText(song).includes(cleanText(track.name))
+                (trackName.includes(songClean) || songClean.includes(trackName)) &&
+                artists.some((a) => cleanText(a.name) === artistClean)
             );
         });
+
+        const anyWithSameArtist = items.find((track) =>
+            track.artists?.some((a) => cleanText(a.name) === artistClean)
+        );
 
         const result =
             exact ||
             partial ||
+            anyWithSameArtist ||
             items.find((track) => track.album?.images?.length) ||
             items[0];
 
@@ -97,6 +130,8 @@ async function getTrackImage(song, artist) {
 }
 
 async function getArtistImage(artist) {
+    const artistClean = cleanText(artist);
+
     const queries = [
         artist,
         `artist:${artist}`,
@@ -108,14 +143,13 @@ async function getArtistImage(artist) {
         const items = data.artists?.items || [];
 
         const exact = items.find(
-            (item) => cleanText(item.name) === cleanText(artist)
+            (item) => cleanText(item.name) === artistClean
         );
 
-        const partial = items.find(
-            (item) =>
-                cleanText(item.name).includes(cleanText(artist)) ||
-                cleanText(artist).includes(cleanText(item.name))
-        );
+        const partial = items.find((item) => {
+            const name = cleanText(item.name);
+            return name.includes(artistClean) || artistClean.includes(name);
+        });
 
         const result =
             exact ||
@@ -131,6 +165,9 @@ async function getArtistImage(artist) {
 }
 
 async function getAlbumImage(album, artist) {
+    const albumClean = cleanText(album);
+    const artistClean = cleanText(artist);
+
     const queries = [
         `${album} ${artist}`,
         `album:${album} artist:${artist}`,
@@ -142,16 +179,22 @@ async function getAlbumImage(album, artist) {
         const items = data.albums?.items || [];
 
         const exact = items.find((item) => {
+            const albumName = cleanText(item.name);
+            const artists = item.artists || [];
+
             return (
-                cleanText(item.name) === cleanText(album) &&
-                item.artists?.some((a) => cleanText(a.name) === cleanText(artist))
+                albumName === albumClean &&
+                artists.some((a) => cleanText(a.name) === artistClean)
             );
         });
 
         const partial = items.find((item) => {
+            const albumName = cleanText(item.name);
+            const artists = item.artists || [];
+
             return (
-                cleanText(item.name).includes(cleanText(album)) ||
-                cleanText(album).includes(cleanText(item.name))
+                (albumName.includes(albumClean) || albumClean.includes(albumName)) &&
+                artists.some((a) => cleanText(a.name) === artistClean)
             );
         });
 

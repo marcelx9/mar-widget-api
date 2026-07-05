@@ -9,7 +9,6 @@ function getLastFmImage(images) {
         images?.find((img) => img.size === "extralarge")?.["#text"] ||
         images?.find((img) => img.size === "large")?.["#text"] ||
         images?.find((img) => img.size === "medium")?.["#text"] ||
-        images?.find((img) => img.size === "small")?.["#text"] ||
         images?.find((img) => img?.["#text"])?.["#text"] ||
         null;
 
@@ -79,29 +78,24 @@ async function getLastFmStats() {
     const topAlbum = topAlbumsResponse.data.topalbums?.album?.[0];
     const userInfo = userInfoResponse.data.user;
 
-    const lastSongImage = getLastFmImage(recentTrack?.image);
-    const topAlbumImage = getLastFmImage(topAlbum?.image);
-    const topSongImage = getLastFmImage(topTrack?.image);
-
     return {
         last_song: recentTrack?.name || "Unknown",
         last_artist: recentTrack?.artist?.["#text"] || "Unknown",
-        last_song_image_fallback: lastSongImage,
-
-        top_album: topAlbum?.name || "Unknown",
-        top_album_artist: topAlbum?.artist?.name || "Unknown",
-        top_album_playcount: topAlbum?.playcount || "0",
-        top_album_image_fallback: topAlbumImage,
+        last_album: recentTrack?.album?.["#text"] || "Unknown",
+        last_song_image_fallback: getLastFmImage(recentTrack?.image),
 
         top_artist: topArtist?.name || "Unknown",
         top_artist_playcount: topArtist?.playcount || "0",
 
-        last_album: recentTrack?.album?.["#text"] || "Unknown",
-
         top_song: topTrack?.name || "Unknown",
         top_song_artist: topTrack?.artist?.name || "Unknown",
         top_song_playcount: topTrack?.playcount || "0",
-        top_song_image_fallback: topSongImage,
+        top_song_image_fallback: getLastFmImage(topTrack?.image),
+
+        top_album: topAlbum?.name || "Unknown",
+        top_album_artist: topAlbum?.artist?.name || "Unknown",
+        top_album_playcount: topAlbum?.playcount || "0",
+        top_album_image_fallback: getLastFmImage(topAlbum?.image),
 
         scrobbles: userInfo?.playcount || "0",
     };

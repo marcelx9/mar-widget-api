@@ -31,68 +31,59 @@ function imageField(name, url) {
 async function getMusicStats() {
     const lastfm = await getLastFmStats();
 
-    let topAlbumImage = lastfm.top_album_image_fallback;
-    let lastSongImage = lastfm.last_song_image_fallback;
-
-// No usamos imagen de álbum como artista, porque se repite mal
-    let topArtistImage = null;
-
-// Para top song, primero dejamos null para forzar Spotify
-    let topSongImage = null;
     let likedSongs = 0;
+
+    let lastSongImage = null;
+    let lastAlbumImage = null;
+    let topAlbumImage = null;
+    let topArtistImage = null;
+    let topSongImage = null;
 
     try {
         likedSongs = await getLikedSongsCount();
-    } catch {}
+    } catch (err) {
+        console.error("ERROR liked songs:", err.response?.data || err.message);
+    }
 
+    // Última canción: Spotify primero
     try {
         const img = await getTrackImage(lastfm.last_song, lastfm.last_artist);
         if (isValidUrl(img)) lastSongImage = img;
-    } catch {}
+    } catch (err) {
+        console.error("ERROR last_song Spotify:", err.response?.data || err.message);
+    }
 
+    // Último álbum usa la misma portada de la última canción
+    lastAlbumImage = lastSongImage;
+
+    // Top álbum: Spotify primero
     try {
-        const img = await getAlbumImage(
-            lastfm.top_album,
-            lastfm.top_album_artist
-        );
+        const img = await getAlbumImage(lastfm.top_album, lastfm.top_album_artist);
         if (isValidUrl(img)) topAlbumImage = img;
-    } catch {}
+    } catch (err) {
+        console.error("ERROR top_album Spotify:", err.response?.data || err.message);
+    }
 
+    // Top artista: Spotify
     try {
         const img = await getArtistImage(lastfm.top_artist);
-        console.log("Spotify top_artist_image:", img);
         if (isValidUrl(img)) topArtistImage = img;
     } catch (err) {
-        console.error("ERROR getArtistImage:", err.response?.data || err.message);
+        console.error("ERROR top_artist Spotify:", err.response?.data || err.message);
     }
 
+    // Top canción: Spotify primero
     try {
-        const img = await getTrackImage(
-            lastfm.top_song,
-            lastfm.top_song_artist
-        );
-        console.log("Spotify top_song_image:", img);
+        const img = await getTrackImage(lastfm.top_song, lastfm.top_song_artist);
         if (isValidUrl(img)) topSongImage = img;
     } catch (err) {
-        console.error("ERROR getTrackImage TOP SONG:", err.response?.data || err.message);
+        console.error("ERROR top_song Spotify:", err.response?.data || err.message);
     }
 
-    if (!isValidUrl(lastSongImage)) lastSongImage = null;
-    if (!isValidUrl(topAlbumImage)) topAlbumImage = lastSongImage || null;
-
-// Si Spotify no encuentra portada de top song, recién usamos LastFM
-    if (!isValidUrl(topSongImage)) {
-        topSongImage = null;
-    }
-
-// Si Spotify no encuentra imagen del artista, mejor no poner otra imagen falsa
-    if (!isValidUrl(topArtistImage)) {
-        topArtistImage = null;
-        console.log("TOP ARTIST IMAGE:", topArtistImage);
-        console.log("TOP SONG IMAGE:", topSongImage);
-    }
-
-
+    // Fallbacks SOLO si Spotify no encontró nada
+    if (!isValidUrl(lastSongImage)) lastSongImage = lastfm.last_song_image_fallback || null;
+    if (!isValidUrl(lastAlbumImage)) lastAlbumImage = lastSongImage || null;
+    if (!isValidUrl(topAlbumImage)) topAlbumImage = lastfm.top_album_image_fallback || null;
 
     return {
         last_song: lastfm.last_song,
@@ -102,13 +93,13 @@ async function getMusicStats() {
         liked_songs: likedSongs,
         liked_songs_text: `${likedSongs.toLocaleString("en-US")} liked songs`,
 
+        last_album: lastfm.last_album,
+        last_album_image: lastAlbumImage,
+
         top_album: lastfm.top_album,
         top_album_artist: lastfm.top_album_artist,
         top_album_image: topAlbumImage,
         top_album_playcount: lastfm.top_album_playcount,
-
-        last_album: lastfm.last_album,
-        last_album_image: lastSongImage,
 
         top_artist: lastfm.top_artist,
         top_artist_image: topArtistImage,
@@ -166,41 +157,21 @@ function buildDiscordPayload(stats) {
             name: "top_album",
             value: `${stats.top_album} · ${stats.top_album_artist}`,
         },
-        {
-            type: 1,
-            name: "top_album_artist",
-            value: String(stats.top_album_artist),
-        },
+        { type: 1, name: "top_album_artist", value: String(stats.top_album_artist) },
         imageField("top_album_image", stats.top_album_image),
 
-        {
-            type: 1,
-            name: "top_album_playcount",
-            value: String(stats.top_album_playcount),
-        },
-        {
-            type: 1,
-            name: "top_artist_playcount",
-            value: String(stats.top_artist_playcount),
-        },
+        { type: 1, name: "top_album_playcount", value: String(stats.top_album_playcount) },
+        { type: 1, name: "top_artist_playcount", value: String(stats.top_artist_playcount) },
 
         {
             type: 1,
             name: "top_song",
             value: `${stats.top_song} · ${stats.top_song_artist}`,
         },
-        {
-            type: 1,
-            name: "top_song_artist",
-            value: String(stats.top_song_artist),
-        },
+        { type: 1, name: "top_song_artist", value: String(stats.top_song_artist) },
         imageField("top_song_image", stats.top_song_image),
 
-        {
-            type: 1,
-            name: "top_song_playcount",
-            value: String(stats.top_song_playcount),
-        },
+        { type: 1, name: "top_song_playcount", value: String(stats.top_song_playcount) },
         { type: 1, name: "scrobbles", value: String(stats.scrobbles) },
     ].filter(Boolean);
 
