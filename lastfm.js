@@ -4,6 +4,16 @@ const lastfm = axios.create({
     baseURL: "https://ws.audioscrobbler.com/2.0/",
 });
 
+const LASTFM_DEFAULT_IMAGE = "2a96cbd8b46e442fc41c2b86b821562f";
+
+function isValidImage(url) {
+    return (
+        typeof url === "string" &&
+        url.startsWith("http") &&
+        !url.includes(LASTFM_DEFAULT_IMAGE)
+    );
+}
+
 function getLastFmImage(images) {
     const url =
         images?.find((img) => img.size === "extralarge")?.["#text"] ||
@@ -12,7 +22,7 @@ function getLastFmImage(images) {
         images?.find((img) => img?.["#text"])?.["#text"] ||
         null;
 
-    return url && url.startsWith("http") ? url : null;
+    return isValidImage(url) ? url : null;
 }
 
 async function getLastFmStats() {

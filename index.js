@@ -2,12 +2,12 @@ const express = require("express");
 require("dotenv").config();
 
 const { getLastFmStats } = require("./lastfm");
+const { getLikedSongsCount } = require("./spotify");
 const {
-    getTrackImage,
-    getArtistImage,
-    getAlbumImage,
-    getLikedSongsCount,
-} = require("./spotify");
+    getDeezerTrackImage,
+    getDeezerAlbumImage,
+    getDeezerArtistImage,
+} = require("./deezer");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,11 +33,11 @@ async function getMusicStats() {
 
     let likedSongs = 0;
 
-    let lastSongImage = null;
-    let lastAlbumImage = null;
-    let topAlbumImage = null;
+    let lastSongImage = lastfm.last_song_image_fallback;
+    let lastAlbumImage = lastfm.last_song_image_fallback;
+    let topAlbumImage = lastfm.top_album_image_fallback;
     let topArtistImage = null;
-    let topSongImage = null;
+    let topSongImage = lastfm.top_song_image_fallback;
 
     try {
         likedSongs = await getLikedSongsCount();
@@ -45,45 +45,23 @@ async function getMusicStats() {
         console.error("ERROR liked songs:", err.response?.data || err.message);
     }
 
-    // Última canción: Spotify primero
-    try {
-        const img = await getTrackImage(lastfm.last_song, lastfm.last_artist);
-        if (isValidUrl(img)) lastSongImage = img;
-    } catch (err) {
-        console.error("ERROR last_song Spotify:", err.response?.data || err.message);
+    if (!isValidUrl(lastSongImage)) {
+        lastSongImage = await getDeezerTrackImage(lastfm.last_song, lastfm.last_artist);
     }
 
-    // Último álbum usa la misma portada de la última canción
-    lastAlbumImage = lastSongImage;
-
-    // Top álbum: Spotify primero
-    try {
-        const img = await getAlbumImage(lastfm.top_album, lastfm.top_album_artist);
-        if (isValidUrl(img)) topAlbumImage = img;
-    } catch (err) {
-        console.error("ERROR top_album Spotify:", err.response?.data || err.message);
+    if (!isValidUrl(lastAlbumImage)) {
+        lastAlbumImage = lastSongImage;
     }
 
-    // Top artista: Spotify
-    try {
-        const img = await getArtistImage(lastfm.top_artist);
-        if (isValidUrl(img)) topArtistImage = img;
-    } catch (err) {
-        console.error("ERROR top_artist Spotify:", err.response?.data || err.message);
+    if (!isValidUrl(topAlbumImage)) {
+        topAlbumImage = await getDeezerAlbumImage(lastfm.top_album, lastfm.top_album_artist);
     }
 
-    // Top canción: Spotify primero
-    try {
-        const img = await getTrackImage(lastfm.top_song, lastfm.top_song_artist);
-        if (isValidUrl(img)) topSongImage = img;
-    } catch (err) {
-        console.error("ERROR top_song Spotify:", err.response?.data || err.message);
+    if (!isValidUrl(topSongImage)) {
+        topSongImage = await getDeezerTrackImage(lastfm.top_song, lastfm.top_song_artist);
     }
 
-    // Fallbacks SOLO si Spotify no encontró nada
-    if (!isValidUrl(lastSongImage)) lastSongImage = lastfm.last_song_image_fallback || null;
-    if (!isValidUrl(lastAlbumImage)) lastAlbumImage = lastSongImage || null;
-    if (!isValidUrl(topAlbumImage)) topAlbumImage = lastfm.top_album_image_fallback || null;
+    topArtistImage = await getDeezerArtistImage(lastfm.top_artist);
 
     return {
         last_song: lastfm.last_song,

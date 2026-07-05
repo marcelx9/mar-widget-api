@@ -4,6 +4,32 @@ const querystring = require("querystring");
 let cachedToken = null;
 let tokenExpiresAt = 0;
 
+const imageCache = new Map();
+const CACHE_TIME = 10 * 60 * 1000;
+
+function cacheKey(type, ...parts) {
+    return `${type}:${parts.join(":").toLowerCase()}`;
+}
+
+function getCached(key) {
+    const item = imageCache.get(key);
+    if (!item) return null;
+
+    if (Date.now() > item.expiresAt) {
+        imageCache.delete(key);
+        return null;
+    }
+
+    return item.value;
+}
+
+function setCached(key, value) {
+    imageCache.set(key, {
+        value,
+        expiresAt: Date.now() + CACHE_TIME,
+    });
+}
+
 async function getSpotifyAccessToken() {
     if (cachedToken && Date.now() < tokenExpiresAt) {
         return cachedToken;
@@ -52,178 +78,172 @@ function cleanText(text) {
         .replace(/[\u0300-\u036f]/g, "")
         .replace(/\(.*?\)/g, "")
         .replace(/\[.*?\]/g, "")
-        .replace(/feat\.|ft\./g, "")
-        .replace(/with .+/g, "")
+        .replace(/\bfeat\.?\b/g, "")
+        .replace(/\bft\.?\b/g, "")
+        .replace(/\bwith\b.+/g, "")
         .replace(/[^a-z0-9\s]/g, "")
         .replace(/\s+/g, " ")
         .trim();
 }
 
-async function spotifySearch(type, query, limit = 10) {
+async function spotifySearch(type, query, limit = 5) {
     const token = await getSpotifyAccessToken();
 
-    const response = await axios.get("https://api.spotify.com/v1/search", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-        params: {
-            q: query,
-            type,
-            limit,
-            market: "US",
-        },
-    });
+    try {
+        const response = await axios.get("https://api.spotify.com/v1/search", {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            params: {
+                q: query,
+                type,
+                limit,
+                market: "US",
+            },
+        });
 
-    return response.data;
+        return response.data;
+    } catch (err) {
+        if (err.response?.status === 429) {
+            console.error(
+                `Spotify rate limit. Retry-After: ${err.response.headers?.["retry-after"] || "unknown"}s`
+            );
+            return null;
+        }
+
+        console.error("Spotify search error:", err.response?.data || err.message);
+        return null;
+    }
 }
 
 async function getTrackImage(song, artist) {
+    const key = cacheKey("track", song, artist);
+    const cached = getCached(key);
+    if (cached !== null) return cached;
+
     const songClean = cleanText(song);
     const artistClean = cleanText(artist);
 
-    const queries = [
-        `${song} ${artist}`,
-        `track:${song} artist:${artist}`,
-        song,
-    ];
+    const query = `${song} ${artist}`;
+    const data = await spotifySearch("track", query, 5);
 
-    for (const query of queries) {
-        const data = await spotifySearch("track", query, 10);
-        const items = data.tracks?.items || [];
+    const items = data?.tracks?.items || [];
 
-        const exact = items.find((track) => {
-            const trackName = cleanText(track.name);
-            const artists = track.artists || [];
+    const exact = items.find((track) => {
+        const trackName = cleanText(track.name);
+        const artists = track.artists || [];
 
-            return (
-                trackName === songClean &&
-                artists.some((a) => cleanText(a.name) === artistClean)
-            );
-        });
-
-        const partial = items.find((track) => {
-            const trackName = cleanText(track.name);
-            const artists = track.artists || [];
-
-            return (
-                (trackName.includes(songClean) || songClean.includes(trackName)) &&
-                artists.some((a) => cleanText(a.name) === artistClean)
-            );
-        });
-
-        const anyWithSameArtist = items.find((track) =>
-            track.artists?.some((a) => cleanText(a.name) === artistClean)
+        return (
+            trackName === songClean &&
+            artists.some((a) => cleanText(a.name) === artistClean)
         );
+    });
 
-        const result =
-            exact ||
-            partial ||
-            anyWithSameArtist ||
-            items.find((track) => track.album?.images?.length) ||
-            items[0];
+    const sameArtist = items.find((track) =>
+        track.artists?.some((a) => cleanText(a.name) === artistClean)
+    );
 
-        const image = getBestImage(result?.album?.images);
-        if (image) return image;
-    }
+    const result =
+        exact ||
+        sameArtist ||
+        items.find((track) => track.album?.images?.length) ||
+        items[0];
 
-    return null;
+    const image = getBestImage(result?.album?.images);
+
+    setCached(key, image || "");
+    return image;
 }
 
 async function getArtistImage(artist) {
+    const key = cacheKey("artist", artist);
+    const cached = getCached(key);
+    if (cached !== null) return cached;
+
     const artistClean = cleanText(artist);
 
-    const queries = [
-        artist,
-        `artist:${artist}`,
-        `"${artist}"`,
-    ];
+    const data = await spotifySearch("artist", artist, 5);
+    const items = data?.artists?.items || [];
 
-    for (const query of queries) {
-        const data = await spotifySearch("artist", query, 10);
-        const items = data.artists?.items || [];
+    const exact = items.find(
+        (item) => cleanText(item.name) === artistClean
+    );
 
-        const exact = items.find(
-            (item) => cleanText(item.name) === artistClean
-        );
+    const result =
+        exact ||
+        items.find((item) => item.images?.length) ||
+        items[0];
 
-        const partial = items.find((item) => {
-            const name = cleanText(item.name);
-            return name.includes(artistClean) || artistClean.includes(name);
-        });
+    const image = getBestImage(result?.images);
 
-        const result =
-            exact ||
-            partial ||
-            items.find((item) => item.images?.length) ||
-            items[0];
-
-        const image = getBestImage(result?.images);
-        if (image) return image;
-    }
-
-    return null;
+    setCached(key, image || "");
+    return image;
 }
 
 async function getAlbumImage(album, artist) {
+    const key = cacheKey("album", album, artist);
+    const cached = getCached(key);
+    if (cached !== null) return cached;
+
     const albumClean = cleanText(album);
     const artistClean = cleanText(artist);
 
-    const queries = [
-        `${album} ${artist}`,
-        `album:${album} artist:${artist}`,
-        album,
-    ];
+    const query = `${album} ${artist}`;
+    const data = await spotifySearch("album", query, 5);
 
-    for (const query of queries) {
-        const data = await spotifySearch("album", query, 10);
-        const items = data.albums?.items || [];
+    const items = data?.albums?.items || [];
 
-        const exact = items.find((item) => {
-            const albumName = cleanText(item.name);
-            const artists = item.artists || [];
+    const exact = items.find((item) => {
+        const albumName = cleanText(item.name);
+        const artists = item.artists || [];
 
-            return (
-                albumName === albumClean &&
-                artists.some((a) => cleanText(a.name) === artistClean)
-            );
-        });
+        return (
+            albumName === albumClean &&
+            artists.some((a) => cleanText(a.name) === artistClean)
+        );
+    });
 
-        const partial = items.find((item) => {
-            const albumName = cleanText(item.name);
-            const artists = item.artists || [];
+    const sameArtist = items.find((item) =>
+        item.artists?.some((a) => cleanText(a.name) === artistClean)
+    );
 
-            return (
-                (albumName.includes(albumClean) || albumClean.includes(albumName)) &&
-                artists.some((a) => cleanText(a.name) === artistClean)
-            );
-        });
+    const result =
+        exact ||
+        sameArtist ||
+        items.find((item) => item.images?.length) ||
+        items[0];
 
-        const result =
-            exact ||
-            partial ||
-            items.find((item) => item.images?.length) ||
-            items[0];
+    const image = getBestImage(result?.images);
 
-        const image = getBestImage(result?.images);
-        if (image) return image;
-    }
-
-    return null;
+    setCached(key, image || "");
+    return image;
 }
 
 async function getLikedSongsCount() {
     const token = await getSpotifyAccessToken();
 
-    const response = await axios.get("https://api.spotify.com/v1/me/tracks", {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-        params: {
-            limit: 1,
-        },
-    });
+    try {
+        const response = await axios.get("https://api.spotify.com/v1/me/tracks", {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            params: {
+                limit: 1,
+            },
+        });
 
-    return response.data.total;
+        return response.data.total;
+    } catch (err) {
+        if (err.response?.status === 429) {
+            console.error(
+                `Spotify liked songs rate limit. Retry-After: ${err.response.headers?.["retry-after"] || "unknown"}s`
+            );
+            return 0;
+        }
+
+        console.error("Spotify liked songs error:", err.response?.data || err.message);
+        return 0;
+    }
 }
 
 module.exports = {
