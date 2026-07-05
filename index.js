@@ -79,7 +79,11 @@ function buildDiscordPayload(stats) {
     return {
         data: {
             dynamic: [
-                { type: 1, name: "last_song", value: String(stats.last_song) },
+                {
+                    type: 1,
+                    name: "last_song",
+                    value: `${stats.last_song} · ${stats.last_artist}`,
+                },
                 { type: 1, name: "last_artist", value: String(stats.last_artist) },
                 {
                     type: 3,
@@ -112,7 +116,11 @@ function buildDiscordPayload(stats) {
 
                 { type: 1, name: "top_artist_playcount", value: String(stats.top_artist_playcount) },
 
-                { type: 1, name: "top_song", value: String(stats.top_song) },
+                {
+                    type: 1,
+                    name: "top_song",
+                    value: `${stats.top_song} · ${stats.top_song_artist}`,
+                },
                 { type: 1, name: "top_song_artist", value: String(stats.top_song_artist) },
                 {
                     type: 3,
