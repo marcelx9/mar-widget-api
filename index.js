@@ -76,13 +76,17 @@ async function getMusicStats() {
 
 // Si Spotify no encuentra portada de top song, recién usamos LastFM
     if (!isValidUrl(topSongImage)) {
-        topSongImage = lastfm.top_song_image_fallback || null;
+        topSongImage = null;
     }
 
 // Si Spotify no encuentra imagen del artista, mejor no poner otra imagen falsa
     if (!isValidUrl(topArtistImage)) {
         topArtistImage = null;
+        console.log("TOP ARTIST IMAGE:", topArtistImage);
+        console.log("TOP SONG IMAGE:", topSongImage);
     }
+
+
 
     return {
         last_song: lastfm.last_song,
