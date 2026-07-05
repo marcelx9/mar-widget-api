@@ -13,7 +13,9 @@ async function getSpotifyAccessToken() {
                 Authorization:
                     "Basic " +
                     Buffer.from(
-                        process.env.SPOTIFY_CLIENT_ID + ":" + process.env.SPOTIFY_CLIENT_SECRET
+                        process.env.SPOTIFY_CLIENT_ID +
+                        ":" +
+                        process.env.SPOTIFY_CLIENT_SECRET
                     ).toString("base64"),
                 "Content-Type": "application/x-www-form-urlencoded",
             },
@@ -24,7 +26,7 @@ async function getSpotifyAccessToken() {
 }
 
 function getBestImage(images) {
-    return images?.[0]?.url || null;
+    return images?.find((img) => img?.url)?.url || null;
 }
 
 async function spotifySearch(type, query, limit = 5) {
@@ -44,45 +46,106 @@ async function spotifySearch(type, query, limit = 5) {
     return response.data;
 }
 
+function cleanText(text) {
+    return String(text || "")
+        .toLowerCase()
+        .replace(/\(.*?\)/g, "")
+        .replace(/\[.*?\]/g, "")
+        .replace(/feat\.|ft\./g, "")
+        .replace(/[^a-z0-9\s]/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
 async function getTrackImage(song, artist) {
-    const data = await spotifySearch("track", `track:"${song}" artist:"${artist}"`, 5);
-    const items = data.tracks?.items || [];
+    const queries = [
+        `track:"${song}" artist:"${artist}"`,
+        `${song} ${artist}`,
+        song,
+    ];
 
-    const exact = items.find((track) =>
-        track.name.toLowerCase() === song.toLowerCase() &&
-        track.artists.some((a) => a.name.toLowerCase() === artist.toLowerCase())
-    );
+    for (const query of queries) {
+        const data = await spotifySearch("track", query, 10);
+        const items = data.tracks?.items || [];
 
-    const track = exact || items[0];
+        const exact = items.find((track) => {
+            const trackName = cleanText(track.name);
+            const songName = cleanText(song);
+            const artists = track.artists || [];
 
-    return getBestImage(track?.album?.images);
+            return (
+                trackName === songName &&
+                artists.some((a) => cleanText(a.name) === cleanText(artist))
+            );
+        });
+
+        const withImage =
+            exact ||
+            items.find((track) => track.album?.images?.length) ||
+            items[0];
+
+        const image = getBestImage(withImage?.album?.images);
+        if (image) return image;
+    }
+
+    return null;
 }
 
 async function getArtistImage(artist) {
-    const data = await spotifySearch("artist", `artist:"${artist}"`, 10);
-    const items = data.artists?.items || [];
+    const queries = [`artist:"${artist}"`, artist];
 
-    const exact = items.find(
-        (item) => item.name.toLowerCase() === artist.toLowerCase()
-    );
+    for (const query of queries) {
+        const data = await spotifySearch("artist", query, 10);
+        const items = data.artists?.items || [];
 
-    const result = exact || items[0];
+        const exact = items.find(
+            (item) => cleanText(item.name) === cleanText(artist)
+        );
 
-    return getBestImage(result?.images);
+        const withImage =
+            exact?.images?.length
+                ? exact
+                : items.find((item) => item.images?.length) || items[0];
+
+        const image = getBestImage(withImage?.images);
+        if (image) return image;
+    }
+
+    return null;
 }
 
 async function getAlbumImage(album, artist) {
-    const data = await spotifySearch("album", `album:"${album}" artist:"${artist}"`, 5);
-    const items = data.albums?.items || [];
+    const queries = [
+        `album:"${album}" artist:"${artist}"`,
+        `${album} ${artist}`,
+        album,
+    ];
 
-    const exact = items.find((item) =>
-        item.name.toLowerCase() === album.toLowerCase() &&
-        item.artists.some((a) => a.name.toLowerCase() === artist.toLowerCase())
-    );
+    for (const query of queries) {
+        const data = await spotifySearch("album", query, 10);
+        const items = data.albums?.items || [];
 
-    const result = exact || items[0];
+        const exact = items.find((item) => {
+            const albumName = cleanText(item.name);
+            const targetAlbum = cleanText(album);
+            const artists = item.artists || [];
 
-    return getBestImage(result?.images);
+            return (
+                albumName === targetAlbum &&
+                artists.some((a) => cleanText(a.name) === cleanText(artist))
+            );
+        });
+
+        const withImage =
+            exact ||
+            items.find((item) => item.images?.length) ||
+            items[0];
+
+        const image = getBestImage(withImage?.images);
+        if (image) return image;
+    }
+
+    return null;
 }
 
 async function getLikedSongsCount() {
