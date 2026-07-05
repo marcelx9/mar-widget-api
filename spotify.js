@@ -85,8 +85,24 @@ async function getAlbumImage(album, artist) {
     return getBestImage(result?.images);
 }
 
+async function getLikedSongsCount() {
+    const token = await getSpotifyAccessToken();
+
+    const response = await axios.get("https://api.spotify.com/v1/me/tracks", {
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+        params: {
+            limit: 1,
+        },
+    });
+
+    return response.data.total;
+}
+
 module.exports = {
     getTrackImage,
-    getAlbumImage,
     getArtistImage,
+    getAlbumImage,
+    getLikedSongsCount,
 };

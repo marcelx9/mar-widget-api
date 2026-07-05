@@ -2,7 +2,7 @@ const express = require("express");
 require("dotenv").config();
 
 const { getLastFmStats } = require("./lastfm");
-const { getTrackImage, getArtistImage, getAlbumImage } = require("./spotify");
+const { getTrackImage, getArtistImage, getAlbumImage, getLikedSongsCount } = require("./spotify");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +16,12 @@ async function getMusicStats() {
     let lastSongImage = lastfm.last_song_image_fallback;
     let topArtistImage = null;
     let topSongImage = lastfm.top_song_image_fallback;
+    let likedSongs = 0;
+
+    try {
+        likedSongs = await getLikedSongsCount();
+    } catch {}
+
 
     try {
         lastSongImage = await getTrackImage(lastfm.last_song, lastfm.last_artist);
@@ -37,7 +43,8 @@ async function getMusicStats() {
         last_song: lastfm.last_song,
         last_artist: lastfm.last_artist,
         last_song_image: lastSongImage,
-
+        liked_songs: likedSongs,
+        liked_songs_text: `${likedSongs.toLocaleString("en-US")} liked songs`,
         top_album: lastfm.top_album,
         top_album_artist: lastfm.top_album_artist,
         top_album_image: topAlbumImage,
@@ -89,6 +96,12 @@ function buildDiscordPayload(stats) {
                     type: 3,
                     name: "last_song_image",
                     value: { url: String(stats.last_song_image) },
+                },
+
+                {
+                    type: 1,
+                    name: "liked_songs",
+                    value: String(stats.liked_songs_text),
                 },
 
                 { type: 1, name: "top_artist", value: String(stats.top_artist) },
